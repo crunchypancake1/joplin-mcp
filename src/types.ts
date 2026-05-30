@@ -33,10 +33,9 @@ export interface SearchSink {
 }
 
 export interface JoplinItem {
-  rawId: string;
   title: string;
   body: string;
-  // Parsed metadata fields
+  // id is the bare 32-char hex item ID; prefix with "joplin:" when building NormalizedDoc.id
   id: string;
   parent_id: string;
   created_time: string;

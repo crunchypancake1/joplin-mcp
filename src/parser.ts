@@ -46,7 +46,6 @@ export function parseJoplinItem(text: string): JoplinItem {
   const rawId = meta["id"] ?? "";
 
   return {
-    rawId,
     title,
     body,
     id: rawId,
