@@ -1,7 +1,7 @@
 {
   "name": "joplin-mcp",
   "main": "src/index.ts",
-  "compatibility_date": "2025-05-01",
+  "compatibility_date": "2026-05-01",
   "compatibility_flags": ["nodejs_compat"],
 
   "durable_objects": {
@@ -32,6 +32,8 @@
   },
 
   "triggers": {
-    "crons": ["0 * * * *"]
+    "crons": [
+      "0 * * * *" // Runs every hour on the hour
+    ]
   }
 }
