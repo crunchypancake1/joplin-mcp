@@ -4,14 +4,9 @@ import type { Env } from "./types.js";
 
 export { JoplinMCP };
 
-const mcpHandler = JoplinMCP.mount("/mcp");
-
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    return mcpHandler.fetch(request, env, ctx);
-  },
-
+  ...JoplinMCP.serve("/mcp", { binding: "JOPLIN_MCP" }),
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runIndexer(env));
   },
-} satisfies ExportedHandler<Env>;
+};

@@ -1,6 +1,5 @@
 export interface Env {
-  // Durable Object namespace — must be named MCP_OBJECT for McpAgent.mount() to find it
-  MCP_OBJECT: DurableObjectNamespace;
+  JOPLIN_MCP: DurableObjectNamespace;
   // R2 bucket: Joplin sync data (read-only by this Worker)
   JOPLIN_NOTES: R2Bucket;
   // R2 bucket: shared AI Search sink (write for indexer)
