@@ -68,25 +68,67 @@ export class JoplinMCP extends McpAgent {
 export default { fetch: JoplinMCP.mount("/mcp") };
 ```
 
-## Part B — indexer (Cron)
+## Shared AI Search Sink — Cross-Domain Contract
 
-Runs on a schedule; reads the bucket and pushes to the sink.
+The sink R2 bucket (`ai-search-sink`) and AI Search instance are **shared across all domain
+workers** (Joplin, Linkwarden, and any future domains). Every indexer writes into the same
+bucket; the AI Search instance indexes all of it.
 
-Shared contracts (same as other domains):
+### File path convention
+
+```
+<source>/<domain-specific-id-path>/<itemId>.md
+```
+
+Examples:
+- Joplin note:   `joplin/<notebookId>/<noteId>.md`
+- Linkwarden:    `linkwarden/<collectionId>/<linkId>.md`
+
+The top-level prefix (`joplin/`, `linkwarden/`, …) **must equal the `source` field** of the
+`NormalizedDoc`. This is what makes per-domain and per-collection AI Search folder filters
+work: `{ key: "folder", type: "gte", value: "joplin/" }` returns only Joplin notes.
+
+### Shared NormalizedDoc contract
+
+All domain indexers must produce documents that conform to this interface. Do not change
+field names or semantics — the AI Search instance and MCP tools from all workers depend on it.
+
 ```ts
 interface NormalizedDoc {
-  id: string;        // "joplin:<itemId>"
-  source: string;    // "joplin"
+  id: string;        // "<source>:<itemId>" — e.g. "joplin:29847587..." or "linkwarden:456"
+  source: string;    // domain identifier — "joplin" | "linkwarden" | …
   title: string;
-  url?: string;      // optional, e.g. joplin://x-callback-url/openNote?id=<id>
-  content: string;   // note body (markdown)
-  metadata: { notebook?: string; createdAt?: string; updatedAt?: string };
+  url?: string;      // deep link back to the item in its native app
+  content: string;   // full text body (markdown)
+  metadata: {        // domain-specific metadata; field names consistent per domain
+    notebook?: string;     // joplin
+    notebookId?: string;   // joplin
+    collection?: string;   // linkwarden
+    collectionId?: string; // linkwarden
+    createdAt?: string;
+    updatedAt?: string;
+  };
 }
+
 interface SearchSink {
   upsert(docs: NormalizedDoc[]): Promise<void>;
   remove(ids: string[]): Promise<void>;
 }
 ```
+
+### Adding a new domain
+
+1. Pick a `source` slug (e.g. `"obsidian"`).
+2. Use `<source>/` as the top-level prefix in all sink R2 keys.
+3. Implement `NormalizedDoc` with the shared required fields; add domain-specific `metadata`
+   keys.
+4. Document the new domain's file-path structure in this section.
+
+---
+
+## Part B — indexer (Cron)
+
+Runs on a schedule; reads the bucket and pushes to the sink.
 
 **Run logic:**
 1. Load the notebook allowlist config from KV (Part C).
