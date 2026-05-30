@@ -5,6 +5,8 @@ import { parseJoplinItem } from "./parser.js";
 import type { Env, NotebookConfig } from "./types.js";
 
 const CONFIG_KEY = "config:joplin:indexed-notebooks";
+// "info.json" uses startsWith which matches the exact top-level key; subpath
+// variants (e.g. subdir/info.json) are NOT filtered but are harmless to parse.
 const SKIP_PREFIXES = [".sync/", "locks/", "temp/", "info.json"];
 
 export class JoplinMCP extends McpAgent<Env> {
@@ -179,9 +181,15 @@ export class JoplinMCP extends McpAgent<Env> {
       },
       async () => {
         const raw = await this.env.JOPLIN_KV.get(CONFIG_KEY);
-        const config: NotebookConfig = raw
-          ? JSON.parse(raw)
-          : { mode: "allowlist", notebookIds: [] };
+        let config: NotebookConfig;
+        try {
+          config = raw ? JSON.parse(raw) : { mode: "allowlist", notebookIds: [] };
+        } catch {
+          return {
+            content: [{ type: "text" as const, text: "Error: stored config is malformed JSON. Use set_indexed_notebooks to reset it." }],
+            isError: true,
+          };
+        }
 
         return {
           content: [{ type: "text" as const, text: JSON.stringify(config, null, 2) }],
