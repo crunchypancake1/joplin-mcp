@@ -1,4 +1,17 @@
+import { JoplinMCP } from "./agent.js";
+import { runIndexer } from "./indexer.js";
+import type { Env } from "./types.js";
+
+export { JoplinMCP };
+
+const mcpHandler = JoplinMCP.mount("/mcp");
+
 export default {
-  fetch: (_req: Request) => new Response("Joplin MCP Worker"),
-  async scheduled(_event: ScheduledEvent, _env: unknown, _ctx: ExecutionContext): Promise<void> {},
-};
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return mcpHandler.fetch(request, env, ctx);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runIndexer(env));
+  },
+} satisfies ExportedHandler<Env>;
