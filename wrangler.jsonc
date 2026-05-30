@@ -1,39 +1,55 @@
 {
-  "name": "joplin-mcp",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-05-01",
-  "compatibility_flags": ["nodejs_compat"],
+	"name": "joplin-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-05-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "JoplinMCP",
+				"class_name": "JoplinMCP"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"JoplinMCP"
+			]
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "JOPLIN_NOTES",
+			"bucket_name": "joplin-notes"
+		},
+		{
+			"binding": "SINK_BUCKET",
+			"bucket_name": "ai-search-sink"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "JOPLIN_KV",
+			"id": "68e5c8c6c2b64c6fb09ee61ab7a79612"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vars": {
+		"AI_SEARCH_INSTANCE": "personal-search"
+	},
+	"routes": [
+		{ "pattern": "joplin.crunchypancake.com/*", "zone_name": "crunchypancake.com" }
+	],
 
-  "durable_objects": {
-    "bindings": [
-      { "name": "JoplinMCP", "class_name": "JoplinMCP" }
-    ]
-  },
-
-  "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["JoplinMCP"] }
-  ],
-
-  "r2_buckets": [
-    { "binding": "JOPLIN_NOTES", "bucket_name": "joplin-notes" },
-    { "binding": "SINK_BUCKET", "bucket_name": "ai-search-sink" }
-  ],
-
-  "kv_namespaces": [
-    { "binding": "JOPLIN_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
-  ],
-
-  "ai": {
-    "binding": "AI"
-  },
-
-  "vars": {
-    "AI_SEARCH_INSTANCE": "REPLACE_WITH_AI_SEARCH_INSTANCE_NAME"
-  },
-
-  "triggers": {
-    "crons": [
-      "0 * * * *" // Runs every hour on the hour
-    ]
-  }
+	"triggers": {
+		"crons": [
+			"0 * * * *" // Runs every hour on the hour
+		]
+	}
 }
