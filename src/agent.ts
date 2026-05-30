@@ -37,15 +37,16 @@ export class JoplinMCP extends McpAgent<Env> {
           ? { key: "folder" as const, type: "gte" as const, value: `joplin/${notebook}/` }
           : { key: "folder" as const, type: "gte" as const, value: "joplin/" };
 
-        // @ts-ignore -- autorag is deprecated in workers-types but still functional at runtime
-        const autorag = this.env.AI.autorag(this.env.AI_SEARCH_INSTANCE);
-        // @ts-ignore
-        const results = await autorag.search({
+        // autorag API works at runtime; cast to any to avoid deprecated-type noise
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const results = await (this.env.AI as any).autorag(
+          this.env.AI_SEARCH_INSTANCE
+        ).search({
           query,
           max_num_results: topK ?? 5,
           ranking_options: { score_threshold: 0.3 },
           filters,
-        });
+        }) as { data: Array<{ filename: string; score: number; content: Array<{ type: string; text: string }> }> };
 
         if (!results.data || results.data.length === 0) {
           return {
