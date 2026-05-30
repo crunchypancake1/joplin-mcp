@@ -37,9 +37,10 @@ export class JoplinMCP extends McpAgent<Env> {
           ? { key: "folder" as const, type: "gte" as const, value: `joplin/${notebook}/` }
           : { key: "folder" as const, type: "gte" as const, value: "joplin/" };
 
-        const results = await this.env.AI.autorag(
-          this.env.AI_SEARCH_INSTANCE
-        ).search({
+        // @ts-ignore -- autorag is deprecated in workers-types but still functional at runtime
+        const autorag = this.env.AI.autorag(this.env.AI_SEARCH_INSTANCE);
+        // @ts-ignore
+        const results = await autorag.search({
           query,
           max_num_results: topK ?? 5,
           ranking_options: { score_threshold: 0.3 },
