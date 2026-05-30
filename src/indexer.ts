@@ -38,20 +38,22 @@ export async function runIndexer(env: Env): Promise<void> {
   );
 
   // Download and parse all item objects
-  const parsed: Array<{ item: ReturnType<typeof parseJoplinItem>; uploadedMs: number }> = [];
-
-  await Promise.all(
+  const parsedRaw = await Promise.all(
     itemObjects.map(async (obj) => {
       const r2obj = await env.JOPLIN_NOTES.get(obj.key);
-      if (!r2obj) return;
+      if (!r2obj) return null;
       const text = await r2obj.text();
       try {
         const item = parseJoplinItem(text);
-        parsed.push({ item, uploadedMs: obj.uploaded.getTime() });
+        return { item, uploadedMs: obj.uploaded.getTime() };
       } catch {
-        // Skip malformed items silently
+        console.warn(`[joplin-indexer] Failed to parse item: ${obj.key}`);
+        return null;
       }
     })
+  );
+  const parsed = parsedRaw.filter(
+    (r): r is { item: ReturnType<typeof parseJoplinItem>; uploadedMs: number } => r !== null
   );
 
   // Build folder (notebook) id → name map from all folder items
@@ -77,6 +79,8 @@ export async function runIndexer(env: Env): Promise<void> {
 
     const docId = `joplin:${item.id}`;
 
+    // Check deletion BEFORE notebook filter: a deleted note should be removed from the
+    // sink even if its notebook was subsequently removed from the allowlist.
     if (item.deleted_time !== 0) {
       toRemove.push(docId);
       continue;
