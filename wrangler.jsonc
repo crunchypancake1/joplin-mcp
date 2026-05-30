@@ -8,7 +8,7 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"name": "JoplinMCP",
+				"name": "MCP_OBJECT",
 				"class_name": "JoplinMCP"
 			}
 		]
@@ -44,7 +44,7 @@
 		"AI_SEARCH_INSTANCE": "personal-search"
 	},
 	"routes": [
-		{ "pattern": "joplin.crunchypancake.com/*", "zone_name": "crunchypancake.com" }
+		{ "pattern": "joplin.crunchypancake.com", "custom_domain": true }
 	],
 
 	"triggers": {
