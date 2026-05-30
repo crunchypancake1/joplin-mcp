@@ -1,12 +1,10 @@
 import { parseJoplinItem } from "./parser.js";
 import { R2SearchSink } from "./sink.js";
 import type { Env, NormalizedDoc, NotebookConfig } from "./types.js";
+import { JOPLIN_SKIP_PREFIXES, JOPLIN_INFO_KEY } from "./types.js";
 
 const CURSOR_KEY = "cursor:joplin:updated_time";
 const CONFIG_KEY = "config:joplin:indexed-notebooks";
-
-// Joplin sync metadata paths — not note content
-const SKIP_PREFIXES = [".sync/", "locks/", "temp/", "info.json"];
 
 export async function runIndexer(env: Env): Promise<void> {
   const sink = new R2SearchSink(env.SINK_BUCKET);
@@ -34,7 +32,7 @@ export async function runIndexer(env: Env): Promise<void> {
 
   // Filter out Joplin internal paths (not note/folder item files)
   const itemObjects = allObjects.filter(
-    (o) => !SKIP_PREFIXES.some((p) => o.key.startsWith(p))
+    (o) => !JOPLIN_SKIP_PREFIXES.some((p) => o.key.startsWith(p)) && o.key !== JOPLIN_INFO_KEY
   );
 
   // Download and parse all item objects
@@ -71,6 +69,9 @@ export async function runIndexer(env: Env): Promise<void> {
 
   for (const { item, uploadedMs } of parsed) {
     if (item.type_ !== 1) continue; // only notes
+
+    // Guard against items with no ID (e.g., plain files accidentally in the sync bucket)
+    if (!item.id) continue;
 
     // Only reprocess items uploaded after the cursor (skip unchanged notes)
     if (uploadedMs <= cursorMs) continue;
@@ -113,7 +114,8 @@ export async function runIndexer(env: Env): Promise<void> {
 }
 
 function isNotebookAllowed(notebookId: string, config: NotebookConfig): boolean {
-  if (config.notebookIds.length === 0) return true; // empty list = all notebooks
+  // Empty list means "index all" for both allowlist and denylist modes
+  if (config.notebookIds.length === 0) return true;
   if (config.mode === "allowlist") return config.notebookIds.includes(notebookId);
   if (config.mode === "denylist") return !config.notebookIds.includes(notebookId);
   return true;

@@ -3,11 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { parseJoplinItem } from "./parser.js";
 import type { Env, NotebookConfig } from "./types.js";
+import { JOPLIN_SKIP_PREFIXES, JOPLIN_INFO_KEY } from "./types.js";
 
 const CONFIG_KEY = "config:joplin:indexed-notebooks";
-// "info.json" uses startsWith which matches the exact top-level key; subpath
-// variants (e.g. subdir/info.json) are NOT filtered but are harmless to parse.
-const SKIP_PREFIXES = [".sync/", "locks/", "temp/", "info.json"];
 
 export class JoplinMCP extends McpAgent<Env> {
   server = new McpServer({ name: "Joplin Notes", version: "1.0.0" });
@@ -139,7 +137,7 @@ export class JoplinMCP extends McpAgent<Env> {
         } while (listCursor);
 
         const itemObjects = allObjects.filter(
-          (o) => !SKIP_PREFIXES.some((p) => o.key.startsWith(p))
+          (o) => !JOPLIN_SKIP_PREFIXES.some((p) => o.key.startsWith(p)) && o.key !== JOPLIN_INFO_KEY
         );
 
         const notebooks: Array<{ id: string; name: string }> = [];

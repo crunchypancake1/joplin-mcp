@@ -51,7 +51,7 @@ function sinkKey(doc: NormalizedDoc): string {
 }
 
 function renderMarkdown(doc: NormalizedDoc): string {
-  const lines: string[] = [`# ${doc.title}`, ""];
+  const lines: string[] = [`# ${doc.title.replace(/\n/g, " ")}`, ""];
   if (doc.url) {
     lines.push(`[Open in Joplin](${doc.url})`, "");
   }

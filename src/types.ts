@@ -50,3 +50,8 @@ export interface NotebookConfig {
   mode: "allowlist" | "denylist";
   notebookIds: string[];
 }
+
+// Joplin sync bucket paths that are not note/folder item files
+export const JOPLIN_SKIP_PREFIXES = [".sync/", "locks/", "temp/"] as const;
+// info.json is an exact top-level key (not a prefix)
+export const JOPLIN_INFO_KEY = "info.json";
