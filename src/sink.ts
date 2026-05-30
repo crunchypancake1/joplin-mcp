@@ -16,16 +16,31 @@ export class R2SearchSink implements SearchSink {
   }
 
   async remove(ids: string[]): Promise<void> {
-    // ids are "joplin:<noteId>" — we don't know notebookId at removal time,
-    // so list objects under "joplin/" and find by noteId suffix
-    await Promise.all(
-      ids.map(async (id) => {
-        const noteId = id.replace(/^joplin:/, "");
-        const listed = await this.bucket.list({ prefix: "joplin/" });
-        const matches = listed.objects.filter((o) => o.key.endsWith(`/${noteId}.md`));
-        await Promise.all(matches.map((o) => this.bucket.delete(o.key)));
-      })
-    );
+    if (ids.length === 0) return;
+
+    // Build a Set of bare note IDs for O(1) lookup
+    const noteIds = new Set(ids.map((id) => id.replace(/^joplin:/, "")));
+
+    // Paginate through all objects under "joplin/" to find matches
+    const keysToDelete: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const listed: R2Objects = await this.bucket.list(
+        cursor ? { prefix: "joplin/", cursor } : { prefix: "joplin/" }
+      );
+      for (const obj of listed.objects) {
+        // Key format: joplin/<notebookId>/<noteId>.md
+        const segments = obj.key.split("/");
+        const filename = segments[segments.length - 1];
+        const noteId = filename.endsWith(".md") ? filename.slice(0, -3) : filename;
+        if (noteIds.has(noteId)) {
+          keysToDelete.push(obj.key);
+        }
+      }
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+
+    await Promise.all(keysToDelete.map((key) => this.bucket.delete(key)));
   }
 }
 
