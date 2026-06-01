@@ -19,10 +19,6 @@ export class JoplinMCP extends McpAgent<Env> {
           "Semantic search over indexed Joplin notes. Returns ranked note snippets relevant to the query.",
         inputSchema: {
           query: z.string().describe("Search query"),
-          notebook: z
-            .string()
-            .optional()
-            .describe("Optional notebook ID to restrict search scope"),
           topK: z
             .number()
             .int()
@@ -32,11 +28,7 @@ export class JoplinMCP extends McpAgent<Env> {
             .describe("Max number of results (default 5)"),
         },
       },
-      async ({ query, notebook, topK }) => {
-        const filters = notebook
-          ? { key: "folder" as const, type: "gte" as const, value: `joplin/${notebook}/` }
-          : { key: "folder" as const, type: "gte" as const, value: "joplin/" };
-
+      async ({ query, topK }) => {
         // autorag API works at runtime; cast to any to avoid deprecated-type noise
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const results = await (this.env.AI as any).autorag(
@@ -45,7 +37,7 @@ export class JoplinMCP extends McpAgent<Env> {
           query,
           max_num_results: topK ?? 5,
           ranking_options: { score_threshold: 0.3 },
-          filters,
+          filters: { folder: "joplin/" },
         }) as { data: Array<{ filename: string; score: number; content: Array<{ type: string; text: string }> }> };
 
         if (!results.data || results.data.length === 0) {
@@ -164,6 +156,60 @@ export class JoplinMCP extends McpAgent<Env> {
           notebooks.length === 0
             ? "No notebooks found."
             : notebooks.map((n) => `${n.name} (${n.id})`).join("\n");
+
+        return { content: [{ type: "text" as const, text }] };
+      }
+    );
+
+    // ── list_notes ────────────────────────────────────────────────────────
+    this.server.registerTool(
+      "list_notes",
+      {
+        description:
+          "List all notes in a given Joplin notebook by notebook ID. Returns note titles and IDs.",
+        inputSchema: {
+          notebookId: z.string().describe("32-character hex notebook (folder) ID"),
+        },
+      },
+      async ({ notebookId }) => {
+        const allObjects: R2Object[] = [];
+        let listCursor: string | undefined;
+        do {
+          const listed: R2Objects = await this.env.JOPLIN_NOTES.list(
+            listCursor ? { cursor: listCursor } : {}
+          );
+          allObjects.push(...listed.objects);
+          listCursor = listed.truncated ? listed.cursor : undefined;
+        } while (listCursor);
+
+        const itemObjects = allObjects.filter(
+          (o) => !JOPLIN_SKIP_PREFIXES.some((p) => o.key.startsWith(p)) && o.key !== JOPLIN_INFO_KEY
+        );
+
+        const notes: Array<{ id: string; title: string }> = [];
+
+        await Promise.all(
+          itemObjects.map(async (obj) => {
+            const r2obj = await this.env.JOPLIN_NOTES.get(obj.key);
+            if (!r2obj) return;
+            const text = await r2obj.text();
+            try {
+              const item = parseJoplinItem(text);
+              if (item.type_ === 1 && item.parent_id === notebookId) {
+                notes.push({ id: item.id, title: item.title });
+              }
+            } catch {
+              // skip malformed items
+            }
+          })
+        );
+
+        notes.sort((a, b) => a.title.localeCompare(b.title));
+
+        const text =
+          notes.length === 0
+            ? `No notes found in notebook ${notebookId}.`
+            : notes.map((n) => `${n.title} (${n.id})`).join("\n");
 
         return { content: [{ type: "text" as const, text }] };
       }
