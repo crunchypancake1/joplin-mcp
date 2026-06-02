@@ -38,6 +38,16 @@
 			"id": "68e5c8c6c2b64c6fb09ee61ab7a79612"
 		}
 	],
+	"queues": {
+		"consumers": [
+			{
+				"queue": "joplin-events",
+				"max_batch_size": 20,
+				"max_batch_timeout": 5,
+				"max_retries": 3
+			}
+		]
+	},
 	"ai": {
 		"binding": "AI"
 	},
@@ -48,11 +58,6 @@
 	"routes": [
 		{ "pattern": "joplin.crunchypancake.com", "custom_domain": true }
 	],
-	"triggers": {
-		"crons": [
-			"0 * * * *" // Runs every hour on the hour
-		]
-	},
 	"observability": {
 		"logs": {
 			"enabled": true,
