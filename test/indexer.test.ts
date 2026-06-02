@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { processR2Event } from "../src/indexer.js";
 import type { Env } from "../src/types.js";
 
