@@ -26,18 +26,18 @@ This is a Cloudflare Workers project that exposes Joplin notes as an MCP (Model 
 Joplin mobile/desktop
     → sync to R2 (JOPLIN_NOTES bucket, raw .md files per note/folder)
     → R2 event notifications (put/delete) → joplin-events Queue
-    → queue handler → runIndexer() → R2SearchSink (SINK_BUCKET)
+    → queue handler → processR2Event() → R2SearchSink (SINK_BUCKET)
     → Workers AI AutoRAG (AI_SEARCH_INSTANCE = "personal-search")
     → MCP search_notes tool queries AutoRAG
 ```
 
 ### Key modules
 
-- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the `joplin-events` Queue consumer to `runIndexer`.
+- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the `joplin-events` Queue consumer to `processR2Event`.
 - **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers five MCP tools: `search_notes`, `get_note`, `list_notebooks`, `get_indexed_notebooks`, `set_indexed_notebooks`.
-- **`src/indexer.ts`** — `runIndexer()`: paginate JOPLIN_NOTES R2 bucket, parse all items, apply notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upsert changed notes and remove deleted ones to SINK_BUCKET.
+- **`src/indexer.ts`** — `processR2Event()`: handles a single R2 event (put/delete). Fetches and parses the changed object, applies notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upserts or removes from SINK_BUCKET. Resolves notebook name via an extra R2 GET on the parent folder object.
 - **`src/parser.ts`** — `parseJoplinItem()`: parses the Joplin sync file format (title on line 0, blank line, body, then `key: value` metadata block at the end).
-- **`src/sink.ts`** — `R2SearchSink`: implements `SearchSink` interface; writes docs to SINK_BUCKET at path `joplin/<notebookId>/<noteId>.md`.
+- **`src/sink.ts`** — `R2SearchSink`: implements `SearchSink` interface; writes docs to SINK_BUCKET at path `joplin/<noteId>.txt`.
 - **`src/types.ts`** — Shared types: `Env`, `NormalizedDoc`, `SearchSink`, `JoplinItem`, `NotebookConfig`, and skip-prefix constants.
 
 ### Bindings (wrangler.jsonc)
@@ -52,7 +52,7 @@ Joplin mobile/desktop
 
 ### Shared sink contract
 
-`SINK_BUCKET` (`ai-search-sink`) is shared with other workers (e.g. linkwarden-mcp). Keys are source-prefixed: `joplin/<notebookId>/<noteId>.md`. The `NormalizedDoc` interface in `src/types.ts` is the cross-worker document contract — changes to it must be coordinated across all workers writing to this bucket.
+`SINK_BUCKET` (`ai-search-sink`) is shared with other workers (e.g. linkwarden-mcp). Keys are source-prefixed: `joplin/<noteId>.txt`. The `NormalizedDoc` interface in `src/types.ts` is the cross-worker document contract — changes to it must be coordinated across all workers writing to this bucket.
 
 ### Notebook allow/denylist
 
