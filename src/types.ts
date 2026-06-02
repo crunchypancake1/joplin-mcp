@@ -4,7 +4,7 @@ export interface Env {
   JOPLIN_NOTES: R2Bucket;
   // R2 bucket: shared AI Search sink (write for indexer)
   SINK_BUCKET: R2Bucket;
-  // KV: cursor + notebook allowlist config
+  // KV: notebook allowlist config
   JOPLIN_KV: KVNamespace;
   // Workers AI binding (for AutoRAG queries)
   AI: Ai;
@@ -48,6 +48,19 @@ export interface JoplinItem {
 export interface NotebookConfig {
   mode: "allowlist" | "denylist";
   notebookIds: string[];
+}
+
+// Shape of the message body Cloudflare R2 sends to a Queue on object change
+export interface R2EventNotificationMessage {
+  account: string;
+  bucket: string;
+  object: {
+    key: string;
+    size: number;
+    eTag: string;
+  };
+  action: "PutObject" | "DeleteObject" | "CopyObject" | "CompleteMultipartUpload";
+  eventTime: string;
 }
 
 // Joplin sync bucket paths that are not note/folder item files
