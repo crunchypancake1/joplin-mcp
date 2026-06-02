@@ -198,4 +198,33 @@ describe("processR2Event", () => {
     expect(body).toContain("Title: Test Note");
     expect(body).toContain("Notebook: ");
   });
+
+  it("DeleteObject on a .sync/ path: does nothing", async () => {
+    const sinkDelete = vi.fn();
+    const env = makeEnv({ sinkDelete });
+
+    await processR2Event(".sync/somefile.md", "DeleteObject", env);
+
+    expect(sinkDelete).not.toHaveBeenCalled();
+  });
+
+  it("PutObject for a note in allowlist: upserts to sink", async () => {
+    const sinkPut = vi.fn().mockResolvedValue(undefined);
+    const noteId = "aaaa1111bbbb2222cccc3333dddd4444";
+    const parentId = "ffff0000ffff0000ffff0000ffff0000";
+    const config = JSON.stringify({ mode: "allowlist", notebookIds: [parentId] });
+    const env = makeEnv({
+      notesGet: async (key: string) => {
+        if (key === `${noteId}.md`) return makeR2Object(noteFixture({ id: noteId, parent_id: parentId }));
+        if (key === `${parentId}.md`) return makeR2Object(folderFixture(parentId, "My Notebook"));
+        return null;
+      },
+      kvGet: async (key) => key === "config:joplin:indexed-notebooks" ? config : null,
+      sinkPut,
+    });
+
+    await processR2Event(`${noteId}.md`, "PutObject", env);
+
+    expect(sinkPut).toHaveBeenCalledOnce();
+  });
 });

@@ -10,18 +10,19 @@ export async function processR2Event(
   action: string,
   env: Env
 ): Promise<void> {
+  // Skip Joplin internal paths regardless of action
+  if (
+    JOPLIN_SKIP_PREFIXES.some((p) => key.startsWith(p)) ||
+    key === JOPLIN_INFO_KEY
+  ) {
+    return;
+  }
+
   const sink = new R2SearchSink(env.SINK_BUCKET);
 
   if (action === "DeleteObject") {
     const noteId = key.replace(/\.md$/, "");
     await sink.remove([`joplin:${noteId}`]);
-    return;
-  }
-
-  if (
-    JOPLIN_SKIP_PREFIXES.some((p) => key.startsWith(p)) ||
-    key === JOPLIN_INFO_KEY
-  ) {
     return;
   }
 
