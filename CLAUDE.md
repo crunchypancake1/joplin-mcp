@@ -25,16 +25,17 @@ This is a Cloudflare Workers project that exposes Joplin notes as an MCP (Model 
 ```
 Joplin mobile/desktop
     → sync to R2 (JOPLIN_NOTES bucket, raw .md files per note/folder)
-    → hourly cron → runIndexer() → R2SearchSink (SINK_BUCKET)
+    → R2 event notifications (put/delete) → joplin-events Queue
+    → queue handler → runIndexer() → R2SearchSink (SINK_BUCKET)
     → Workers AI AutoRAG (AI_SEARCH_INSTANCE = "personal-search")
     → MCP search_notes tool queries AutoRAG
 ```
 
 ### Key modules
 
-- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the hourly cron to `runIndexer`.
+- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the `joplin-events` Queue consumer to `runIndexer`.
 - **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers five MCP tools: `search_notes`, `get_note`, `list_notebooks`, `get_indexed_notebooks`, `set_indexed_notebooks`.
-- **`src/indexer.ts`** — `runIndexer()`: paginate JOPLIN_NOTES R2 bucket, parse all items, apply notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upsert changed notes and remove deleted ones to SINK_BUCKET. Uses a KV cursor (`cursor:joplin:updated_time`) to skip unchanged items.
+- **`src/indexer.ts`** — `runIndexer()`: paginate JOPLIN_NOTES R2 bucket, parse all items, apply notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upsert changed notes and remove deleted ones to SINK_BUCKET.
 - **`src/parser.ts`** — `parseJoplinItem()`: parses the Joplin sync file format (title on line 0, blank line, body, then `key: value` metadata block at the end).
 - **`src/sink.ts`** — `R2SearchSink`: implements `SearchSink` interface; writes docs to SINK_BUCKET at path `joplin/<notebookId>/<noteId>.md`.
 - **`src/types.ts`** — Shared types: `Env`, `NormalizedDoc`, `SearchSink`, `JoplinItem`, `NotebookConfig`, and skip-prefix constants.
@@ -46,7 +47,7 @@ Joplin mobile/desktop
 | `JOPLIN_MCP` | Durable Object | McpAgent instance (with SQLite) |
 | `JOPLIN_NOTES` | R2 | Joplin sync bucket (read-only by this worker) |
 | `SINK_BUCKET` | R2 | Shared AI search sink (`ai-search-sink` bucket) — written by indexer |
-| `JOPLIN_KV` | KV | Cursor + notebook config |
+| `JOPLIN_KV` | KV | Notebook config |
 | `AI` | Workers AI | AutoRAG queries |
 
 ### Shared sink contract
