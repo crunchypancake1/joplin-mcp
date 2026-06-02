@@ -15,7 +15,7 @@ export class R2SearchSink implements SearchSink {
 
   async remove(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    await this.bucket.delete(ids);
+    await this.bucket.delete(ids.map(sinkKey));
   }
 }
 

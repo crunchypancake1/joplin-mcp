@@ -83,7 +83,7 @@ describe("processR2Event", () => {
 
     await processR2Event("aaaa1111bbbb2222cccc3333dddd4444.md", "DeleteObject", env);
 
-    expect(sinkDelete).toHaveBeenCalledWith(["joplin:aaaa1111bbbb2222cccc3333dddd4444"]);
+    expect(sinkDelete).toHaveBeenCalledWith(["joplin/aaaa1111bbbb2222cccc3333dddd4444.txt"]);
   });
 
   it("PutObject on a .sync/ path: does nothing", async () => {
@@ -134,7 +134,7 @@ describe("processR2Event", () => {
 
     await processR2Event(`${noteId}.md`, "PutObject", env);
 
-    expect(sinkDelete).toHaveBeenCalledWith([`joplin:${noteId}`]);
+    expect(sinkDelete).toHaveBeenCalledWith([`joplin/${noteId}.txt`]);
   });
 
   it("PutObject for a note excluded by denylist: does nothing", async () => {
