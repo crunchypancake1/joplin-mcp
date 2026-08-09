@@ -18,10 +18,11 @@ npx vitest run test/parser.test.ts
 
 ## Architecture
 
-This is a Cloudflare Workers project that exposes Joplin notes as an MCP (Model Context Protocol) server and indexes them into an AI search sink.
+This is a Cloudflare Workers project that exposes Joplin notes as an MCP (Model Context Protocol) server: it indexes notes into an AI search sink for semantic search, and it can write back to a live Joplin instance via the Joplin Data API.
 
 ### Data flow
 
+Read path (search/browse, backed by the R2 index):
 ```
 Joplin mobile/desktop
     → sync to R2 (JOPLIN_NOTES bucket, raw .md files per note/folder)
@@ -31,10 +32,16 @@ Joplin mobile/desktop
     → MCP search_notes tool queries AutoRAG
 ```
 
+Write path (mutating tools, bypasses the index entirely):
+```
+MCP create_note / update_note / delete_note / create_notebook / update_notebook / delete_notebook
+    → JOPLIN_CLIENT_URL + JOPLIN_API_TOKEN → Joplin Data API on the live instance
+```
+
 ### Key modules
 
 - **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the `joplin-events` Queue consumer to `processR2Event`.
-- **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers five MCP tools: `search_notes`, `get_note`, `list_notebooks`, `get_indexed_notebooks`, `set_indexed_notebooks`.
+- **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers MCP tools for the R2-backed read path (`search_notes`, `get_note`, `list_notebooks`, `list_notes`, `get_indexed_notebooks`, `set_indexed_notebooks`) and for the live Joplin Data API write path (`create_note`, `update_note`, `delete_note`, `create_notebook`, `update_notebook`, `delete_notebook`) via a shared `joplinFetch()` helper.
 - **`src/indexer.ts`** — `processR2Event()`: handles a single R2 event (put/delete). Fetches and parses the changed object, applies notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upserts or removes from SINK_BUCKET. Resolves notebook name via an extra R2 GET on the parent folder object.
 - **`src/parser.ts`** — `parseJoplinItem()`: parses the Joplin sync file format (title on line 0, blank line, body, then `key: value` metadata block at the end).
 - **`src/sink.ts`** — `R2SearchSink`: implements `SearchSink` interface; writes docs to SINK_BUCKET at path `joplin/<noteId>.txt`.
@@ -49,6 +56,8 @@ Joplin mobile/desktop
 | `SINK_BUCKET` | R2 | Shared AI search sink (`ai-search-sink` bucket) — written by indexer |
 | `JOPLIN_KV` | KV | Notebook config |
 | `AI` | Workers AI | AutoRAG queries |
+
+`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and secret `JOPLIN_API_TOKEN` (`wrangler secret put JOPLIN_API_TOKEN`) are only used by the write-path tools in `src/agent.ts`, not by the indexer.
 
 ### Shared sink contract
 
