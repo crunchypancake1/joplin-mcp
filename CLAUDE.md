@@ -13,66 +13,49 @@ npm run typecheck    # tsc --noEmit — type-check without emitting
 
 Run a single test file:
 ```bash
-npx vitest run test/parser.test.ts
+npx vitest run test/joplin-client.test.ts
 ```
 
 ## Architecture
 
-This is a Cloudflare Workers project that exposes Joplin notes as an MCP (Model Context Protocol) server: it indexes notes into an AI search sink for semantic search, and it can write back to a live Joplin instance via the Joplin Data API.
+This is a Cloudflare Workers project that exposes a live Joplin instance as an MCP (Model Context
+Protocol) server. There is no index or cache — every tool call goes straight to the Joplin Data API
+on the user's own Joplin instance.
 
 ### Data flow
 
-Read path (search/browse, backed by the R2 index):
 ```
-Joplin mobile/desktop
-    → sync to R2 (JOPLIN_NOTES bucket, raw .md files per note/folder)
-    → R2 event notifications (put/delete) → joplin-events Queue
-    → queue handler → processR2Event() → R2SearchSink (SINK_BUCKET)
-    → Workers AI AutoRAG (AI_SEARCH_INSTANCE = "personal-search")
-    → MCP search_notes tool queries AutoRAG
-```
-
-Write path (mutating tools, bypasses the index entirely):
-```
-MCP create_note / update_note / delete_note / create_notebook / update_notebook / delete_notebook
-    → JOPLIN_CLIENT_URL + JOPLIN_API_TOKEN → Joplin Data API on the live instance
+MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Object)
+                                                  │
+                                    JoplinClient ──► Joplin Data API (JOPLIN_CLIENT_URL)
 ```
 
 ### Key modules
 
-- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`, wires the `joplin-events` Queue consumer to `processR2Event`.
-- **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers MCP tools for the R2-backed read path (`search_notes`, `get_note`, `list_notebooks`, `list_notes`, `get_indexed_notebooks`, `set_indexed_notebooks`) and for the live Joplin Data API write path (`create_note`, `update_note`, `delete_note`, `create_notebook`, `update_notebook`, `delete_notebook`) via a shared `joplinFetch()` helper.
-- **`src/indexer.ts`** — `processR2Event()`: handles a single R2 event (put/delete). Fetches and parses the changed object, applies notebook allow/denylist (stored in KV as `config:joplin:indexed-notebooks`), upserts or removes from SINK_BUCKET. Resolves notebook name via an extra R2 GET on the parent folder object.
-- **`src/parser.ts`** — `parseJoplinItem()`: parses the Joplin sync file format (title on line 0, blank line, body, then `key: value` metadata block at the end).
-- **`src/sink.ts`** — `R2SearchSink`: implements `SearchSink` interface; writes docs to SINK_BUCKET at path `joplin/<noteId>.txt`.
-- **`src/types.ts`** — Shared types: `Env`, `NormalizedDoc`, `SearchSink`, `JoplinItem`, `NotebookConfig`, and skip-prefix constants.
+- **`src/index.ts`** — Worker entrypoint: mounts the DO as an MCP server at `/mcp` via `JoplinMCP.serve()`.
+- **`src/agent.ts`** — `JoplinMCP` Durable Object (extends `McpAgent`). Registers MCP tools
+  (`get_note`, `list_notebooks`, `list_notes`, `create_note`, `update_note`, `delete_note`,
+  `create_notebook`, `update_notebook`, `delete_notebook`) that call a `JoplinClient` and format
+  results as MCP tool responses.
+- **`src/joplin-client.ts`** — `JoplinClient`: thin wrapper around the Joplin Data API. Handles
+  token-authenticated requests, list-endpoint pagination, and filtering trashed items out of list
+  results. Throws `JoplinApiError` on non-2xx responses.
+- **`src/types.ts`** — `Env` binding shape.
 
 ### Bindings (wrangler.jsonc)
 
 | Binding | Type | Purpose |
 |---|---|---|
 | `JOPLIN_MCP` | Durable Object | McpAgent instance (with SQLite) |
-| `JOPLIN_NOTES` | R2 | Joplin sync bucket (read-only by this worker) |
-| `SINK_BUCKET` | R2 | Shared AI search sink (`ai-search-sink` bucket) — written by indexer |
-| `JOPLIN_KV` | KV | Notebook config |
-| `AI` | Workers AI | AutoRAG queries |
 
-`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and secret `JOPLIN_API_TOKEN` (`wrangler secret put JOPLIN_API_TOKEN`) are only used by the write-path tools in `src/agent.ts`, not by the indexer.
+`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and secret `JOPLIN_API_TOKEN`
+(`wrangler secret put JOPLIN_API_TOKEN`) are the only configuration this Worker needs — both are
+used by `JoplinClient`.
 
-### Shared sink contract
+### Notes on the Joplin Data API
 
-`SINK_BUCKET` (`ai-search-sink`) is shared with other workers (e.g. linkwarden-mcp). Keys are source-prefixed: `joplin/<noteId>.txt`. The `NormalizedDoc` interface in `src/types.ts` is the cross-worker document contract — changes to it must be coordinated across all workers writing to this bucket.
-
-### Notebook allow/denylist
-
-Stored in KV as JSON at key `config:joplin:indexed-notebooks` with shape `{ mode: "allowlist"|"denylist", notebookIds: string[] }`. Empty `notebookIds` means "index all" in either mode.
-
-### Joplin sync file format
-
-Each Joplin item (note or folder) is a `.md` file in R2 with:
-- Line 0: title
-- Line 1: blank
-- Lines 2..N-1: note body (may be empty)
-- Lines N..: metadata block (`key: value` pairs, one per line, contiguous at the end)
-
-`type_: 1` = note, `type_: 2` = folder/notebook. `deleted_time != 0` means the item is soft-deleted.
+- List endpoints (`/folders`, `/folders/:id/notes`) are paginated (`page`, `has_more`); `JoplinClient`
+  walks every page and filters out items with a non-zero `deleted_time` (trashed).
+- `delete_notebook` calls `DELETE /folders/:id?permanent=0`, which moves the notebook to trash
+  (recoverable from Joplin) rather than purging it.
+- `delete_note` permanently deletes — Joplin's Data API has no trash for notes.
