@@ -30,6 +30,11 @@
 	"routes": [
 		{ "pattern": "joplin.crunchypancake.com/mcp", "zone_name": "crunchypancake.com" }
 	],
+	// Explicitly empty: omitting `triggers` entirely leaves any previously
+	// deployed cron in place, and this Worker has no `scheduled()` handler.
+	"triggers": {
+		"crons": []
+	},
 	"observability": {
 		"logs": {
 			"enabled": true,
