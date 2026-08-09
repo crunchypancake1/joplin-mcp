@@ -10,6 +10,15 @@ const CONFIG_KEY = "config:joplin:indexed-notebooks";
 export class JoplinMCP extends McpAgent<Env> {
   server = new McpServer({ name: "Joplin Notes", version: "1.0.0" });
 
+  private async joplinFetch(path: string, options: RequestInit = {}): Promise<Response> {
+    const sep = path.includes("?") ? "&" : "?";
+    const url = `${this.env.JOPLIN_CLIENT_URL}${path}${sep}token=${this.env.JOPLIN_API_TOKEN}`;
+    return fetch(url, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    });
+  }
+
   async init() {
     // ── search_notes ──────────────────────────────────────────────────────
     this.server.registerTool(
@@ -93,6 +102,13 @@ export class JoplinMCP extends McpAgent<Env> {
           };
         }
 
+        if (item.deleted_time !== 0) {
+          return {
+            content: [{ type: "text" as const, text: `Note ${id} is in trash` }],
+            isError: true,
+          };
+        }
+
         const result = [
           `# ${item.title}`,
           "",
@@ -141,7 +157,7 @@ export class JoplinMCP extends McpAgent<Env> {
             const text = await r2obj.text();
             try {
               const item = parseJoplinItem(text);
-              if (item.type_ === 2) {
+              if (item.type_ === 2 && item.deleted_time === 0) {
                 notebooks.push({ id: item.id, name: item.title });
               }
             } catch {
@@ -195,7 +211,7 @@ export class JoplinMCP extends McpAgent<Env> {
             const text = await r2obj.text();
             try {
               const item = parseJoplinItem(text);
-              if (item.type_ === 1 && item.parent_id === notebookId) {
+              if (item.type_ === 1 && item.parent_id === notebookId && item.deleted_time === 0) {
                 notes.push({ id: item.id, title: item.title });
               }
             } catch {
@@ -238,6 +254,163 @@ export class JoplinMCP extends McpAgent<Env> {
         return {
           content: [{ type: "text" as const, text: JSON.stringify(config, null, 2) }],
         };
+      }
+    );
+
+    // ── create_note ───────────────────────────────────────────────────────
+    this.server.registerTool(
+      "create_note",
+      {
+        description: "Create a new note in Joplin. Returns the new note's ID.",
+        inputSchema: {
+          title: z.string().describe("Note title"),
+          body: z.string().optional().describe("Note body (markdown)"),
+          notebookId: z.string().describe("ID of the notebook to create the note in"),
+        },
+      },
+      async ({ title, body, notebookId }) => {
+        const res = await this.joplinFetch("/notes", {
+          method: "POST",
+          body: JSON.stringify({ title, body: body ?? "", parent_id: notebookId }),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        const note = await res.json() as { id: string; title: string };
+        return { content: [{ type: "text" as const, text: `Created note "${note.title}" (${note.id})` }] };
+      }
+    );
+
+    // ── update_note ───────────────────────────────────────────────────────
+    this.server.registerTool(
+      "update_note",
+      {
+        description: "Update an existing Joplin note's title, body, or notebook.",
+        inputSchema: {
+          id: z.string().describe("32-character hex note ID"),
+          title: z.string().optional().describe("New title"),
+          body: z.string().optional().describe("New body (markdown)"),
+          notebookId: z.string().optional().describe("Move note to this notebook ID"),
+        },
+      },
+      async ({ id, title, body, notebookId }) => {
+        const payload: Record<string, string> = {};
+        if (title !== undefined) payload.title = title;
+        if (body !== undefined) payload.body = body;
+        if (notebookId !== undefined) payload.parent_id = notebookId;
+
+        if (Object.keys(payload).length === 0) {
+          return { content: [{ type: "text" as const, text: "No fields to update." }], isError: true };
+        }
+
+        const res = await this.joplinFetch(`/notes/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        const note = await res.json() as { id: string; title: string };
+        return { content: [{ type: "text" as const, text: `Updated note "${note.title}" (${note.id})` }] };
+      }
+    );
+
+    // ── delete_note ───────────────────────────────────────────────────────
+    this.server.registerTool(
+      "delete_note",
+      {
+        description: "Permanently delete a Joplin note by ID.",
+        inputSchema: {
+          id: z.string().describe("32-character hex note ID"),
+        },
+      },
+      async ({ id }) => {
+        const res = await this.joplinFetch(`/notes/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: `Deleted note ${id}` }] };
+      }
+    );
+
+    // ── create_notebook ───────────────────────────────────────────────────
+    this.server.registerTool(
+      "create_notebook",
+      {
+        description: "Create a new Joplin notebook (folder). Returns the new notebook's ID.",
+        inputSchema: {
+          title: z.string().describe("Notebook title"),
+          parentId: z.string().optional().describe("ID of the parent notebook (for nested notebooks)"),
+        },
+      },
+      async ({ title, parentId }) => {
+        const payload: Record<string, string> = { title };
+        if (parentId !== undefined) payload.parent_id = parentId;
+        const res = await this.joplinFetch("/folders", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        const notebook = await res.json() as { id: string; title: string };
+        return { content: [{ type: "text" as const, text: `Created notebook "${notebook.title}" (${notebook.id})` }] };
+      }
+    );
+
+    // ── update_notebook ───────────────────────────────────────────────────
+    this.server.registerTool(
+      "update_notebook",
+      {
+        description: "Update an existing Joplin notebook's title or move it under a new parent.",
+        inputSchema: {
+          id: z.string().describe("32-character hex notebook ID"),
+          title: z.string().optional().describe("New title"),
+          parentId: z.string().optional().describe("Move notebook under this parent ID"),
+        },
+      },
+      async ({ id, title, parentId }) => {
+        const payload: Record<string, string> = {};
+        if (title !== undefined) payload.title = title;
+        if (parentId !== undefined) payload.parent_id = parentId;
+
+        if (Object.keys(payload).length === 0) {
+          return { content: [{ type: "text" as const, text: "No fields to update." }], isError: true };
+        }
+
+        const res = await this.joplinFetch(`/folders/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        const notebook = await res.json() as { id: string; title: string };
+        return { content: [{ type: "text" as const, text: `Updated notebook "${notebook.title}" (${notebook.id})` }] };
+      }
+    );
+
+    // ── delete_notebook ───────────────────────────────────────────────────
+    this.server.registerTool(
+      "delete_notebook",
+      {
+        description: "Move a Joplin notebook (and all its notes) to trash. Recoverable from Joplin.",
+        inputSchema: {
+          id: z.string().describe("32-character hex notebook ID"),
+        },
+      },
+      async ({ id }) => {
+        const res = await this.joplinFetch(`/folders/${id}?permanent=0`, { method: "DELETE" });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text" as const, text: `Error ${res.status}: ${err}` }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: `Moved notebook ${id} to trash` }] };
       }
     );
 

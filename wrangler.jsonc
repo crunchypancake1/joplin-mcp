@@ -52,11 +52,13 @@
 		"binding": "AI"
 	},
 	"vars": {
-		"AI_SEARCH_INSTANCE": "personal-search"
+		"AI_SEARCH_INSTANCE": "personal-search",
+		// JOPLIN_API_TOKEN is a secret — deploy then run: wrangler secret put JOPLIN_API_TOKEN
+		"JOPLIN_CLIENT_URL": "https://joplin.crunchypancake.com"
 	},
 	"workers_dev": true,
 	"routes": [
-		{ "pattern": "joplin.crunchypancake.com", "custom_domain": true }
+		{ "pattern": "joplin.crunchypancake.com/mcp", "zone_name": "crunchypancake.com" }
 	],
 	"observability": {
 		"logs": {
