@@ -55,7 +55,10 @@ used by `JoplinClient`.
 ### Notes on the Joplin Data API
 
 - List endpoints (`/folders`, `/folders/:id/notes`) are paginated (`page`, `has_more`); `JoplinClient`
-  walks every page and filters out items with a non-zero `deleted_time` (trashed).
+  walks every page and returns everything. It does **not** filter by `deleted_time` — the live
+  Joplin instance this Worker talks to predates the Trash feature (~v3.1), so `notes`/`folders`
+  have no `deleted_time` column at all, and requesting that field throws a raw `SQLITE_ERROR`.
+  If the target instance is ever upgraded past v3.1, trash filtering could be reintroduced.
 - `delete_notebook` calls `DELETE /folders/:id?permanent=0`, which moves the notebook to trash
   (recoverable from Joplin) rather than purging it.
 - `delete_note` permanently deletes — Joplin's Data API has no trash for notes.
