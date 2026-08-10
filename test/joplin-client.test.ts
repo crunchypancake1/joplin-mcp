@@ -29,7 +29,6 @@ describe("JoplinClient", () => {
         body: "World",
         created_time: 1,
         updated_time: 2,
-        deleted_time: 0,
       })
     );
 
@@ -40,7 +39,7 @@ describe("JoplinClient", () => {
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain(`${BASE_URL}/notes/n1?`);
     expect(url).toContain("token=test-token");
-    expect(url).toContain("fields=id,parent_id,title,body,created_time,updated_time,deleted_time");
+    expect(url).toContain("fields=id,parent_id,title,body,created_time,updated_time");
     expect(note?.title).toBe("Hello");
   });
 
@@ -64,13 +63,13 @@ describe("JoplinClient", () => {
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse({
-          items: [{ id: "a", title: "A", deleted_time: 0 }],
+          items: [{ id: "a", title: "A" }],
           has_more: true,
         })
       )
       .mockResolvedValueOnce(
         jsonResponse({
-          items: [{ id: "b", title: "B", deleted_time: 0 }],
+          items: [{ id: "b", title: "B" }],
           has_more: false,
         })
       );
@@ -82,18 +81,15 @@ describe("JoplinClient", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("page=1");
     expect(fetchMock.mock.calls[1][0]).toContain("page=2");
     expect(notebooks).toEqual([
-      { id: "a", title: "A", deleted_time: 0 },
-      { id: "b", title: "B", deleted_time: 0 },
+      { id: "a", title: "A" },
+      { id: "b", title: "B" },
     ]);
   });
 
-  it("listNotes: filters out trashed items", async () => {
+  it("listNotes: returns items from the response", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        items: [
-          { id: "a", title: "Active", deleted_time: 0 },
-          { id: "b", title: "Trashed", deleted_time: 1748000000000 },
-        ],
+        items: [{ id: "a", title: "Active" }],
         has_more: false,
       })
     );
@@ -101,7 +97,7 @@ describe("JoplinClient", () => {
     const client = new JoplinClient(BASE_URL, TOKEN);
     const notes = await client.listNotes("folder1");
 
-    expect(notes).toEqual([{ id: "a", title: "Active", deleted_time: 0 }]);
+    expect(notes).toEqual([{ id: "a", title: "Active" }]);
   });
 
   it("createNote: posts the expected payload", async () => {

@@ -41,12 +41,6 @@ export class JoplinMCP extends McpAgent<Env> {
             isError: true,
           };
         }
-        if (note.deleted_time !== 0) {
-          return {
-            content: [{ type: "text" as const, text: `Note ${id} is in trash` }],
-            isError: true,
-          };
-        }
 
         const result = [
           `# ${note.title}`,

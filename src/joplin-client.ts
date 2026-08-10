@@ -5,13 +5,11 @@ export interface JoplinNote {
   body: string;
   created_time: number;
   updated_time: number;
-  deleted_time: number;
 }
 
 export interface JoplinListItem {
   id: string;
   title: string;
-  deleted_time: number;
 }
 
 export class JoplinApiError extends Error {
@@ -36,13 +34,13 @@ export class JoplinClient {
     });
   }
 
-  // Walks every page of a list endpoint, filtering out trashed items.
+  // Walks every page of a list endpoint.
   private async paginateItems(path: string): Promise<JoplinListItem[]> {
     const sep = path.includes("?") ? "&" : "?";
     const items: JoplinListItem[] = [];
     let page = 1;
     for (;;) {
-      const res = await this.request(`${path}${sep}fields=id,title,deleted_time&page=${page}`);
+      const res = await this.request(`${path}${sep}fields=id,title&page=${page}`);
       if (!res.ok) {
         throw new JoplinApiError(res.status, await res.text());
       }
@@ -51,12 +49,12 @@ export class JoplinClient {
       if (!data.has_more) break;
       page++;
     }
-    return items.filter((item) => item.deleted_time === 0);
+    return items;
   }
 
   async getNote(id: string): Promise<JoplinNote | null> {
     const res = await this.request(
-      `/notes/${id}?fields=id,parent_id,title,body,created_time,updated_time,deleted_time`
+      `/notes/${id}?fields=id,parent_id,title,body,created_time,updated_time`
     );
     if (res.status === 404) return null;
     if (!res.ok) {
