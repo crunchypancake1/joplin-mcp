@@ -12,11 +12,12 @@ function errorContent(err: unknown) {
 export class JoplinMCP extends McpAgent<Env> {
   server = new McpServer({ name: "Joplin Notes", version: "1.0.0" });
 
-  private get client(): JoplinClient {
-    return new JoplinClient(this.env.JOPLIN_CLIENT_URL, this.env.JOPLIN_API_TOKEN);
-  }
+  private client!: JoplinClient;
 
   async init() {
+    const token = await this.env.JOPLIN_API_TOKEN.get();
+    this.client = new JoplinClient(this.env.JOPLIN_CLIENT_URL, token);
+
     // ── get_note ──────────────────────────────────────────────────────────
     this.server.registerTool(
       "get_note",

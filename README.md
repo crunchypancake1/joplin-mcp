@@ -36,11 +36,30 @@ MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Ob
 
 ```bash
 npm install
-wrangler secret put JOPLIN_API_TOKEN   # Joplin Data API token
 ```
 
 Before deploying, set `vars.JOPLIN_CLIENT_URL` in `wrangler.jsonc` to the base URL of your Joplin
 Data API.
+
+`JOPLIN_API_TOKEN` (a Joplin Data API token) is read from Cloudflare's
+[Secrets Store](https://developers.cloudflare.com/secrets-store/), not a plain Wrangler secret.
+Create it once per account and it's reusable across Workers:
+
+```bash
+wrangler secrets-store secret create <store-id> \
+  --name joplin-token --scopes workers --remote
+```
+
+`wrangler.jsonc` then binds it via `secrets_store_secrets`:
+
+```jsonc
+"secrets_store_secrets": [
+  { "binding": "JOPLIN_API_TOKEN", "store_id": "<store-id>", "secret_name": "joplin-token" }
+]
+```
+
+For local dev, create a local-only secret with the same name (omit `--remote`) so `wrangler dev`
+has something to read.
 
 See `CLAUDE.md` for the full architecture and binding reference.
 
@@ -58,9 +77,8 @@ npm run typecheck   # tsc --noEmit
 npm run deploy
 ```
 
-Or connect this repository to a Cloudflare Worker for git-based deploys. Either way,
-`JOPLIN_API_TOKEN` must be set as a Wrangler secret in the target environment — it is never stored
-in the repo.
+Or connect this repository to a Cloudflare Worker for git-based deploys. Either way, the
+`joplin-token` secret must exist in the account's Secrets Store — it is never stored in the repo.
 
 ## Stack
 

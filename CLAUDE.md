@@ -48,9 +48,11 @@ MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Ob
 |---|---|---|
 | `JOPLIN_MCP` | Durable Object | McpAgent instance (with SQLite) |
 
-`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and secret `JOPLIN_API_TOKEN`
-(`wrangler secret put JOPLIN_API_TOKEN`) are the only configuration this Worker needs — both are
-used by `JoplinClient`.
+`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and `JOPLIN_API_TOKEN` are the only
+configuration this Worker needs — both are used by `JoplinClient`. `JOPLIN_API_TOKEN` is a Secrets
+Store binding (`secrets_store_secrets` in `wrangler.jsonc`), pointing at the `joplin-token` secret
+in the account's Secrets Store. It's an async binding — read via `await env.JOPLIN_API_TOKEN.get()`
+(done once in `agent.ts#init`), not a plain string like a `vars` entry.
 
 ### Notes on the Joplin Data API
 
