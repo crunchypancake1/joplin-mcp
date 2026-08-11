@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { JoplinApiError, JoplinClient } from "../src/joplin-client.js";
 
-const BASE_URL = "https://joplin.example.com";
 const TOKEN = "test-token";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -10,14 +9,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("JoplinClient", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
+  let fakeVpc: { fetch: typeof fetchMock };
 
   beforeEach(() => {
     fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    fakeVpc = { fetch: fetchMock };
   });
 
   it("getNote: appends the token and fields to the request URL", async () => {
@@ -32,12 +28,12 @@ describe("JoplinClient", () => {
       })
     );
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     const note = await client.getNote("n1");
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
-    expect(url).toContain(`${BASE_URL}/notes/n1?`);
+    expect(url).toContain(`http://joplin/notes/n1?`);
     expect(url).toContain("token=test-token");
     expect(url).toContain("fields=id,parent_id,title,body,created_time,updated_time");
     expect(note?.title).toBe("Hello");
@@ -46,7 +42,7 @@ describe("JoplinClient", () => {
   it("getNote: returns null on 404", async () => {
     fetchMock.mockResolvedValueOnce(new Response("not found", { status: 404 }));
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     const note = await client.getNote("missing");
 
     expect(note).toBeNull();
@@ -55,7 +51,7 @@ describe("JoplinClient", () => {
   it("getNote: throws JoplinApiError on other non-ok responses", async () => {
     fetchMock.mockResolvedValueOnce(new Response("boom", { status: 500 }));
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     await expect(client.getNote("n1")).rejects.toThrow(JoplinApiError);
   });
 
@@ -74,7 +70,7 @@ describe("JoplinClient", () => {
         })
       );
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     const notebooks = await client.listNotebooks();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -94,7 +90,7 @@ describe("JoplinClient", () => {
       })
     );
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     const notes = await client.listNotes("folder1");
 
     expect(notes).toEqual([{ id: "a", title: "Active" }]);
@@ -103,11 +99,11 @@ describe("JoplinClient", () => {
   it("createNote: posts the expected payload", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: "n1", title: "New" }));
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     await client.createNote("New", "body text", "folder1");
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain(`${BASE_URL}/notes?`);
+    expect(url).toContain(`http://joplin/notes?`);
     expect(options.method).toBe("POST");
     expect(JSON.parse(options.body as string)).toEqual({
       title: "New",
@@ -119,18 +115,18 @@ describe("JoplinClient", () => {
   it("deleteNotebook: sends permanent=0 so it trashes instead of purging", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     await client.deleteNotebook("f1");
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain(`${BASE_URL}/folders/f1?permanent=0`);
+    expect(url).toContain(`http://joplin/folders/f1?permanent=0`);
     expect(options.method).toBe("DELETE");
   });
 
   it("mutating calls throw JoplinApiError with the response body on failure", async () => {
     fetchMock.mockResolvedValueOnce(new Response("validation failed", { status: 400 }));
 
-    const client = new JoplinClient(BASE_URL, TOKEN);
+    const client = new JoplinClient(fakeVpc, TOKEN);
     await expect(client.createNotebook("x")).rejects.toMatchObject({
       status: 400,
       message: "validation failed",

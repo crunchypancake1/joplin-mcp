@@ -16,7 +16,7 @@ export class JoplinMCP extends McpAgent<Env> {
 
   async init() {
     const token = await this.env.JOPLIN_API_TOKEN.get();
-    this.client = new JoplinClient(this.env.JOPLIN_CLIENT_URL, token);
+    this.client = new JoplinClient(this.env.JOPLIN_VPC, token);
 
     // ── get_note ──────────────────────────────────────────────────────────
     this.server.registerTool(

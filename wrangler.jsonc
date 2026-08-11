@@ -22,9 +22,13 @@
 			]
 		}
 	],
-	"vars": {
-		"JOPLIN_CLIENT_URL": "https://joplin.crunchypancake.com"
-	},
+	"vpc_services": [
+		{
+			"binding": "JOPLIN_VPC",
+			"service_id": "019ff22e-2eb4-73d2-9d5a-3778f2b69920",
+			"remote": true
+		}
+	],
 	"secrets_store_secrets": [
 		{
 			"binding": "JOPLIN_API_TOKEN",

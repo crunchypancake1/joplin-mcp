@@ -18,17 +18,18 @@ export class JoplinApiError extends Error {
   }
 }
 
-// Thin wrapper around the Joplin Data API (https://joplinapp.org/api/references/rest_api/).
+// Thin wrapper around the Joplin Data API (https://joplinapp.org/api/references/rest_api/),
+// reached via a Workers VPC Service binding rather than a public hostname.
 export class JoplinClient {
   constructor(
-    private readonly baseUrl: string,
+    private readonly vpc: Fetcher,
     private readonly token: string
   ) {}
 
   private async request(path: string, options: RequestInit = {}): Promise<Response> {
     const sep = path.includes("?") ? "&" : "?";
-    const url = `${this.baseUrl}${path}${sep}token=${this.token}`;
-    return fetch(url, {
+    const url = `http://joplin${path}${sep}token=${this.token}`;
+    return this.vpc.fetch(url, {
       ...options,
       headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
     });
