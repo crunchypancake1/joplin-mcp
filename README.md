@@ -8,12 +8,16 @@ create/update/delete notes and notebooks directly against your own Joplin instan
 ## How it works
 
 Every tool call goes straight to the Joplin Data API on your live instance — there's no index or
-cache in between.
+cache in between. The Joplin Data API itself is never exposed to the public internet: the Worker
+reaches it privately through a [Workers VPC Service](https://developers.cloudflare.com/workers-vpc/)
+binding over a Cloudflare Tunnel.
 
 ```
 MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Object)
                                                   │
-                                    JoplinClient ──► Joplin Data API
+                          JoplinClient ──► JOPLIN_VPC (Workers VPC Service)
+                                                  │
+                          Cloudflare Tunnel ──► Joplin Data API (LAN-only)
 ```
 
 `JoplinMCP` is a [`McpAgent`](https://github.com/cloudflare/agents) hosted on a Durable Object.
@@ -38,8 +42,24 @@ MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Ob
 npm install
 ```
 
-Before deploying, set `vars.JOPLIN_CLIENT_URL` in `wrangler.jsonc` to the base URL of your Joplin
-Data API.
+Before deploying, your Joplin Data API needs to be reachable from a Cloudflare Tunnel, registered as
+a [Workers VPC Service](https://developers.cloudflare.com/workers-vpc/get-started/):
+
+```bash
+npx wrangler vpc service create joplin-data-api \
+  --type http \
+  --tunnel-id <YOUR_TUNNEL_ID> \
+  --hostname <JOPLIN_HOST_ON_YOUR_LAN> \
+  --http-port <JOPLIN_PORT>
+```
+
+Then bind the resulting service ID in `wrangler.jsonc`:
+
+```jsonc
+"vpc_services": [
+  { "binding": "JOPLIN_VPC", "service_id": "<service-id-from-above>", "remote": true }
+]
+```
 
 `JOPLIN_API_TOKEN` (a Joplin Data API token) is read from Cloudflare's
 [Secrets Store](https://developers.cloudflare.com/secrets-store/), not a plain Wrangler secret.

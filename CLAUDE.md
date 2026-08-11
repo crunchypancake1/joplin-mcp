@@ -20,14 +20,19 @@ npx vitest run test/joplin-client.test.ts
 
 This is a Cloudflare Workers project that exposes a live Joplin instance as an MCP (Model Context
 Protocol) server. There is no index or cache — every tool call goes straight to the Joplin Data API
-on the user's own Joplin instance.
+on the user's own Joplin instance. The Joplin Data API itself is never reachable from the public
+internet — it's LAN-only, reached from the Worker via a private Workers VPC Service binding.
 
 ### Data flow
 
 ```
 MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Object)
                                                   │
-                                    JoplinClient ──► Joplin Data API (JOPLIN_CLIENT_URL)
+                          JoplinClient ──► JOPLIN_VPC (Workers VPC Service binding)
+                                                  │
+                          Cloudflare Tunnel ("Home Network", runs on the GL.iNet router)
+                                                  │
+                          Joplin Data API (mediaserver.lan:41184, LAN-only)
 ```
 
 ### Key modules
@@ -47,12 +52,30 @@ MCP client ──HTTP/SSE──► Worker (/mcp) ──► JoplinMCP (Durable Ob
 | Binding | Type | Purpose |
 |---|---|---|
 | `JOPLIN_MCP` | Durable Object | McpAgent instance (with SQLite) |
+| `JOPLIN_VPC` | VPC Service (`vpc_services`) | Private route to the Joplin Data API over Cloudflare Tunnel — no public hostname |
+| `JOPLIN_API_TOKEN` | Secrets Store (`secrets_store_secrets`) | Joplin Data API token |
 
-`vars.JOPLIN_CLIENT_URL` (base URL of the live Joplin Data API) and `JOPLIN_API_TOKEN` are the only
-configuration this Worker needs — both are used by `JoplinClient`. `JOPLIN_API_TOKEN` is a Secrets
-Store binding (`secrets_store_secrets` in `wrangler.jsonc`), pointing at the `joplin-token` secret
-in the account's Secrets Store. It's an async binding — read via `await env.JOPLIN_API_TOKEN.get()`
-(done once in `agent.ts#init`), not a plain string like a `vars` entry.
+`JOPLIN_VPC` and `JOPLIN_API_TOKEN` are the only configuration this Worker needs — both are used by
+`JoplinClient`, which takes the VPC binding directly (typed as `Fetcher`) instead of a base URL
+string and calls `vpc.fetch(...)` instead of the global `fetch()`. `JOPLIN_API_TOKEN` points at the
+`joplin-token` secret in the account's Secrets Store and is an async binding — read via
+`await env.JOPLIN_API_TOKEN.get()` (done once in `agent.ts#init`), not a plain string like a `vars`
+entry.
+
+The VPC Service (`joplin-data-api`) is registered against the Joplin host (`mediaserver.lan:41184`)
+through the "Home Network" Cloudflare Tunnel — see
+[Workers VPC](https://developers.cloudflare.com/workers-vpc/) for the underlying mechanism. That
+tunnel also carries a few unrelated services on other hostnames (home assistant, music, linkwarden,
+bitwarden) — don't touch those when working on this project's tunnel config.
+
+The Worker's public `/mcp` route (`joplin.crunchypancake.com`) is a Workers **Custom Domain**
+(`{ "pattern": "joplin.crunchypancake.com", "custom_domain": true }` in `wrangler.jsonc`), which
+Cloudflare provisions and owns the DNS record for directly — it has no dependency on the tunnel or
+any manually-managed DNS record. This matters: an earlier zone-Route version of this config shared
+its DNS record with the tunnel's Public Hostname entry for Joplin, and removing that entry (as part
+of retiring the public Joplin API path) deleted the DNS record and took `/mcp` down with it. Custom
+Domains route the whole hostname to the Worker (no path scoping) — safe here because the MCP
+handler already returns a clean 404 for any path other than `/mcp`.
 
 ### Notes on the Joplin Data API
 
