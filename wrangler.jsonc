@@ -38,7 +38,7 @@
 	],
 	"workers_dev": false,
 	"routes": [
-		{ "pattern": "joplin.crunchypancake.com/mcp", "zone_name": "crunchypancake.com" }
+		{ "pattern": "joplin.crunchypancake.com", "custom_domain": true }
 	],
 	"triggers": {
 		"crons": []
