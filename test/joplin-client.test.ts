@@ -9,11 +9,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("JoplinClient", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
-  let fakeVpc: { fetch: typeof fetchMock };
+  let fakeVpc: Fetcher;
 
   beforeEach(() => {
     fetchMock = vi.fn();
-    fakeVpc = { fetch: fetchMock };
+    fakeVpc = { fetch: fetchMock } as unknown as Fetcher;
   });
 
   it("getNote: appends the token and fields to the request URL", async () => {
