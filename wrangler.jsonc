@@ -22,6 +22,9 @@
 			]
 		}
 	],
+	"vars": {
+		"JOPLIN_DEFAULT_NOTEBOOK": "Default"
+	},
 	"vpc_services": [
 		{
 			"binding": "JOPLIN_VPC",

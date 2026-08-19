@@ -5,4 +5,6 @@ export interface Env {
   JOPLIN_VPC: Fetcher;
   // Joplin Data API token — Secrets Store binding, read via JOPLIN_API_TOKEN.get()
   JOPLIN_API_TOKEN: SecretsStoreSecret;
+  // Notebook used when a tool call doesn't name one. Falls back to "Default".
+  JOPLIN_DEFAULT_NOTEBOOK?: string;
 }
